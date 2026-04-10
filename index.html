@@ -6,15 +6,17 @@
   <title>Prompt Browser</title>
   <style>
     :root {
-      --bg: #f4efdf;
-      --panel: #fff9ea;
-      --ink: #22201b;
-      --muted: #6c655a;
-      --accent: #b64a22;
-      --accent-strong: #8a2b08;
-      --edge: #d8ccb2;
-      --success: #236a3b;
-      --radius: 14px;
+      --bg-0: #0a1020;
+      --bg-1: #111c35;
+      --panel: rgba(15, 24, 44, 0.78);
+      --panel-strong: rgba(9, 15, 31, 0.92);
+      --ink: #ebf0ff;
+      --muted: #9daccc;
+      --accent: #3aa7ff;
+      --accent-strong: #1974ff;
+      --edge: rgba(132, 161, 220, 0.34);
+      --success: #4de2a0;
+      --radius: 16px;
     }
 
     * {
@@ -25,27 +27,30 @@
       margin: 0;
       color: var(--ink);
       background:
-        radial-gradient(circle at 15% 0%, rgba(233, 189, 98, 0.32), transparent 42%),
-        radial-gradient(circle at 90% 20%, rgba(162, 66, 31, 0.16), transparent 35%),
-        linear-gradient(160deg, #f9f4e6 0%, #f1e5cc 45%, #f6efde 100%);
-      font-family: "Book Antiqua", "Palatino Linotype", "Georgia", serif;
+        radial-gradient(circle at 8% 0%, rgba(46, 136, 255, 0.24), transparent 42%),
+        radial-gradient(circle at 90% 18%, rgba(20, 206, 184, 0.16), transparent 40%),
+        linear-gradient(155deg, var(--bg-0) 0%, var(--bg-1) 50%, #070d1a 100%);
+      font-family: "Sora", "Avenir Next", "Segoe UI", sans-serif;
       min-height: 100vh;
     }
 
     .app {
       width: min(1100px, 94vw);
       margin: 24px auto 28px;
-      background: color-mix(in srgb, var(--panel) 92%, #ffffff);
+      background: linear-gradient(160deg, var(--panel) 0%, var(--panel-strong) 100%);
       border: 1px solid var(--edge);
       border-radius: 20px;
-      box-shadow: 0 16px 42px rgba(86, 56, 15, 0.12);
+      box-shadow:
+        0 22px 45px rgba(0, 0, 0, 0.36),
+        0 0 0 1px rgba(102, 160, 255, 0.08) inset;
+      backdrop-filter: blur(8px);
       overflow: hidden;
     }
 
     header {
       padding: 18px 18px 14px;
       border-bottom: 1px solid var(--edge);
-      background: linear-gradient(100deg, rgba(255, 255, 255, 0.44), rgba(234, 213, 177, 0.4));
+      background: linear-gradient(105deg, rgba(62, 122, 255, 0.13), rgba(33, 214, 189, 0.08));
     }
 
     h1 {
@@ -67,30 +72,32 @@
       overflow-x: auto;
       padding: 14px;
       border-bottom: 1px solid var(--edge);
-      background: linear-gradient(180deg, rgba(255, 255, 255, 0.45), rgba(240, 223, 190, 0.22));
+      background: linear-gradient(180deg, rgba(17, 28, 52, 0.72), rgba(10, 17, 33, 0.32));
       scrollbar-width: thin;
     }
 
     .tab {
-      border: 1px solid color-mix(in srgb, var(--edge) 70%, #9f8562);
+      border: 1px solid rgba(124, 157, 220, 0.36);
       border-radius: 999px;
-      background: #fff;
+      background: rgba(16, 28, 52, 0.72);
       color: var(--ink);
       padding: 7px 12px;
       cursor: pointer;
       white-space: nowrap;
       font-size: 0.86rem;
-      transition: transform 140ms ease, background 140ms ease;
+      transition: transform 140ms ease, background 140ms ease, border-color 140ms ease;
     }
 
     .tab:hover {
       transform: translateY(-1px);
+      border-color: rgba(92, 188, 255, 0.72);
     }
 
     .tab[aria-selected="true"] {
-      background: linear-gradient(120deg, #be5a30, #9a3111);
-      color: #fff8ef;
-      border-color: #9c3a19;
+      background: linear-gradient(120deg, var(--accent), var(--accent-strong));
+      color: #f2f8ff;
+      border-color: rgba(94, 180, 255, 0.95);
+      box-shadow: 0 0 20px rgba(47, 149, 255, 0.34);
     }
 
     main {
@@ -106,12 +113,19 @@
     .prompt-card {
       border: 1px solid var(--edge);
       border-radius: var(--radius);
-      background: linear-gradient(180deg, #fffef9 0%, #fbf3e0 100%);
-      padding: 12px;
+      background: linear-gradient(170deg, rgba(16, 28, 52, 0.92) 0%, rgba(12, 20, 38, 0.95) 100%);
+      padding: 13px;
       display: grid;
       gap: 10px;
       align-content: start;
       min-height: 168px;
+      transition: transform 160ms ease, border-color 160ms ease, box-shadow 160ms ease;
+    }
+
+    .prompt-card:hover {
+      transform: translateY(-2px);
+      border-color: rgba(95, 177, 255, 0.66);
+      box-shadow: 0 10px 24px rgba(0, 0, 0, 0.28);
     }
 
     .prompt-title {
@@ -123,7 +137,7 @@
 
     .prompt-snippet {
       margin: 0;
-      color: #3d372f;
+      color: #bcc9e4;
       font-size: 0.9rem;
       line-height: 1.42;
     }
@@ -137,16 +151,23 @@
     }
 
     .copy-btn {
-      border: none;
+      border: 1px solid rgba(136, 188, 255, 0.4);
       background: linear-gradient(140deg, var(--accent), var(--accent-strong));
       color: #fff;
-      font-family: "Trebuchet MS", "Verdana", sans-serif;
+      font-family: "Sora", "Avenir Next", "Segoe UI", sans-serif;
       font-weight: 700;
       letter-spacing: 0.05em;
       border-radius: 10px;
       cursor: pointer;
       padding: 8px 12px;
       min-width: 82px;
+      box-shadow: 0 8px 18px rgba(34, 118, 255, 0.26);
+      transition: transform 120ms ease, box-shadow 120ms ease, filter 120ms ease;
+    }
+
+    .copy-btn:hover {
+      filter: brightness(1.06);
+      box-shadow: 0 10px 22px rgba(34, 118, 255, 0.34);
     }
 
     .copy-btn:active {

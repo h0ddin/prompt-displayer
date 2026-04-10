@@ -1,9 +1,306 @@
-<!DOCTYPE html>
-<html>
-    <head>
-        <title>Example</title>
-    </head>
-    <body>
-        <p>This is an example of a simple HTML page with one paragraph.</p>
-    </body>
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Prompt Browser</title>
+  <style>
+    :root {
+      --bg: #f4efdf;
+      --panel: #fff9ea;
+      --ink: #22201b;
+      --muted: #6c655a;
+      --accent: #b64a22;
+      --accent-strong: #8a2b08;
+      --edge: #d8ccb2;
+      --success: #236a3b;
+      --radius: 14px;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at 15% 0%, rgba(233, 189, 98, 0.32), transparent 42%),
+        radial-gradient(circle at 90% 20%, rgba(162, 66, 31, 0.16), transparent 35%),
+        linear-gradient(160deg, #f9f4e6 0%, #f1e5cc 45%, #f6efde 100%);
+      font-family: "Book Antiqua", "Palatino Linotype", "Georgia", serif;
+      min-height: 100vh;
+    }
+
+    .app {
+      width: min(1100px, 94vw);
+      margin: 24px auto 28px;
+      background: color-mix(in srgb, var(--panel) 92%, #ffffff);
+      border: 1px solid var(--edge);
+      border-radius: 20px;
+      box-shadow: 0 16px 42px rgba(86, 56, 15, 0.12);
+      overflow: hidden;
+    }
+
+    header {
+      padding: 18px 18px 14px;
+      border-bottom: 1px solid var(--edge);
+      background: linear-gradient(100deg, rgba(255, 255, 255, 0.44), rgba(234, 213, 177, 0.4));
+    }
+
+    h1 {
+      margin: 0;
+      font-size: clamp(1.2rem, 2.2vw, 1.7rem);
+      letter-spacing: 0.01em;
+      font-weight: 700;
+    }
+
+    .meta {
+      margin-top: 8px;
+      color: var(--muted);
+      font-size: 0.9rem;
+    }
+
+    .tabs {
+      display: flex;
+      gap: 8px;
+      overflow-x: auto;
+      padding: 14px;
+      border-bottom: 1px solid var(--edge);
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.45), rgba(240, 223, 190, 0.22));
+      scrollbar-width: thin;
+    }
+
+    .tab {
+      border: 1px solid color-mix(in srgb, var(--edge) 70%, #9f8562);
+      border-radius: 999px;
+      background: #fff;
+      color: var(--ink);
+      padding: 7px 12px;
+      cursor: pointer;
+      white-space: nowrap;
+      font-size: 0.86rem;
+      transition: transform 140ms ease, background 140ms ease;
+    }
+
+    .tab:hover {
+      transform: translateY(-1px);
+    }
+
+    .tab[aria-selected="true"] {
+      background: linear-gradient(120deg, #be5a30, #9a3111);
+      color: #fff8ef;
+      border-color: #9c3a19;
+    }
+
+    main {
+      padding: 14px;
+    }
+
+    .prompt-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+      gap: 12px;
+    }
+
+    .prompt-card {
+      border: 1px solid var(--edge);
+      border-radius: var(--radius);
+      background: linear-gradient(180deg, #fffef9 0%, #fbf3e0 100%);
+      padding: 12px;
+      display: grid;
+      gap: 10px;
+      align-content: start;
+      min-height: 168px;
+    }
+
+    .prompt-title {
+      margin: 0;
+      font-size: 1.03rem;
+      line-height: 1.2;
+      overflow-wrap: anywhere;
+    }
+
+    .prompt-snippet {
+      margin: 0;
+      color: #3d372f;
+      font-size: 0.9rem;
+      line-height: 1.42;
+    }
+
+    .copy-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+      margin-top: auto;
+    }
+
+    .copy-btn {
+      border: none;
+      background: linear-gradient(140deg, var(--accent), var(--accent-strong));
+      color: #fff;
+      font-family: "Trebuchet MS", "Verdana", sans-serif;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+      border-radius: 10px;
+      cursor: pointer;
+      padding: 8px 12px;
+      min-width: 82px;
+    }
+
+    .copy-btn:active {
+      transform: scale(0.98);
+    }
+
+    .copy-feedback {
+      color: var(--success);
+      font-size: 0.84rem;
+      min-height: 1em;
+    }
+
+    .empty {
+      color: var(--muted);
+      padding: 10px 4px;
+      font-style: italic;
+    }
+
+    @media (max-width: 620px) {
+      .app {
+        width: 100%;
+        margin: 0;
+        border-radius: 0;
+        border-left: 0;
+        border-right: 0;
+        min-height: 100vh;
+      }
+
+      .tabs {
+        padding: 10px;
+        gap: 6px;
+      }
+
+      main {
+        padding: 10px;
+      }
+
+      .prompt-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header>
+      <h1>Prompt Browser</h1>
+      <div id="meta" class="meta">Loading prompt files...</div>
+    </header>
+    <div id="tabs" class="tabs" role="tablist" aria-label="Prompt files"></div>
+    <main>
+      <section id="cards" class="prompt-grid" aria-live="polite"></section>
+    </main>
+  </div>
+
+  <script src="./prompts-data.js"></script>
+  <script>
+    const data = window.PROMPT_BROWSER_DATA;
+    const tabsEl = document.getElementById("tabs");
+    const cardsEl = document.getElementById("cards");
+    const metaEl = document.getElementById("meta");
+
+    if (!data || !Array.isArray(data.files) || data.files.length === 0) {
+      metaEl.textContent = "No prompt data found. Run: node scripts/build_prompt_data.mjs";
+      cardsEl.innerHTML = '<p class="empty">No prompts to display.</p>';
+    } else {
+      let activeIndex = 0;
+
+      function escapeHtml(text) {
+        return text
+          .replaceAll("&", "&amp;")
+          .replaceAll("<", "&lt;")
+          .replaceAll(">", "&gt;")
+          .replaceAll('"', "&quot;")
+          .replaceAll("'", "&#039;");
+      }
+
+      async function copyPrompt(text, button, feedbackEl) {
+        try {
+          await navigator.clipboard.writeText(text);
+        } catch {
+          const helper = document.createElement("textarea");
+          helper.value = text;
+          helper.style.position = "fixed";
+          helper.style.opacity = "0";
+          document.body.appendChild(helper);
+          helper.focus();
+          helper.select();
+          document.execCommand("copy");
+          helper.remove();
+        }
+
+        button.textContent = "COPIED";
+        feedbackEl.textContent = "Copied to clipboard";
+        setTimeout(() => {
+          button.textContent = "COPY";
+          feedbackEl.textContent = "";
+        }, 1200);
+      }
+
+      function renderTabs() {
+        tabsEl.innerHTML = "";
+        data.files.forEach((file, index) => {
+          const button = document.createElement("button");
+          button.type = "button";
+          button.className = "tab";
+          button.role = "tab";
+          button.id = `tab-${index}`;
+          button.setAttribute("aria-controls", `panel-${index}`);
+          button.setAttribute("aria-selected", String(index === activeIndex));
+          button.textContent = file.fileName;
+          button.addEventListener("click", () => {
+            activeIndex = index;
+            renderTabs();
+            renderCards();
+          });
+          tabsEl.appendChild(button);
+        });
+      }
+
+      function renderCards() {
+        const file = data.files[activeIndex];
+        metaEl.textContent = `${data.fileCount} files | ${file.promptCount} prompts in ${file.relativePath}`;
+
+        if (!file.prompts.length) {
+          cardsEl.innerHTML = '<p class="empty">This file has no prompts.</p>';
+          return;
+        }
+
+        cardsEl.innerHTML = file.prompts
+          .map(
+            (prompt, promptIndex) => `
+              <article class="prompt-card" id="panel-${activeIndex}" role="tabpanel" aria-labelledby="tab-${activeIndex}">
+                <h2 class="prompt-title">${escapeHtml(prompt.title || `Prompt ${promptIndex + 1}`)}</h2>
+                <p class="prompt-snippet">${escapeHtml(prompt.snippet)}</p>
+                <div class="copy-row">
+                  <button class="copy-btn" type="button" data-prompt-id="${escapeHtml(prompt.id)}">COPY</button>
+                  <span class="copy-feedback" aria-hidden="true"></span>
+                </div>
+              </article>
+            `
+          )
+          .join("");
+
+        const buttons = cardsEl.querySelectorAll(".copy-btn");
+        buttons.forEach((button, idx) => {
+          const feedback = button.parentElement.querySelector(".copy-feedback");
+          button.addEventListener("click", () => copyPrompt(file.prompts[idx].text, button, feedback));
+        });
+      }
+
+      renderTabs();
+      renderCards();
+    }
+  </script>
+</body>
 </html>

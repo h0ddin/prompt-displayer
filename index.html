@@ -246,6 +246,8 @@
       <h1>Prompt Browser</h1>
       <div id="meta" class="meta">Loading prompt files...</div>
     </header>
+    <div class="tabs-label">Mode</div>
+    <div id="modeTabs" class="tabs" role="tablist" aria-label="Prompt modes"></div>
     <div class="tabs-label">Groups</div>
     <div id="groupTabs" class="tabs" role="tablist" aria-label="Prompt groups"></div>
     <div class="tabs-label">Folders</div>
@@ -260,6 +262,7 @@
   <script src="./prompts-data.js"></script>
   <script>
     const data = window.PROMPT_BROWSER_DATA;
+    const modeTabsEl = document.getElementById("modeTabs");
     const groupTabsEl = document.getElementById("groupTabs");
     const folderTabsEl = document.getElementById("folderTabs");
     const fileTabsEl = document.getElementById("fileTabs");
@@ -274,51 +277,85 @@
         return String(path || "").split(/[\\/]/).filter(Boolean);
       }
 
-      function deriveGroup(parts) {
+      function isSynergyRoot(parts) {
+        return parts[0] === "syngery-prompts" || parts[0] === "synergy-prompts";
+      }
+
+      function deriveMode(parts) {
         if (!parts.length) {
           return "root";
         }
-        if (parts[0] === "syngery-prompts") {
-          // New structure: syngery-prompts/<group>/<file>.txt
-          // Legacy fallback: syngery-prompts/<file>.txt -> map to "sets"
-          return parts.length >= 3 ? parts[1] : "sets";
+        if (isSynergyRoot(parts)) {
+          if (parts[1] === "ai") {
+            return "ai";
+          }
+          if (parts[1] === "thematic") {
+            return "thematic";
+          }
+          // Legacy compatibility: syngery-prompts/<group>/<file>.txt
+          return "ai";
         }
-        // Non-synergy roots (e.g. basic/*) become their own groups.
         return parts[0];
       }
 
-      function deriveFolderMeta(parts, group) {
+      function deriveGroup(parts, mode) {
+        if (!parts.length) {
+          return "root";
+        }
+        if (isSynergyRoot(parts)) {
+          if (mode === "thematic") {
+            return parts[1] === "thematic" ? (parts[2] || "uncategorized") : "uncategorized";
+          }
+          if (parts[1] === "ai") {
+            return parts[2] || "sets";
+          }
+          // Legacy compatibility: syngery-prompts/<group>/<file>.txt
+          return parts[1] || "sets";
+        }
+        // Non-synergy roots (e.g. basic/*) become their own groups.
+        return mode;
+      }
+
+      function deriveFolderMeta(parts, mode, group) {
         if (!parts.length) {
           return { key: "root", label: "root" };
         }
 
         const folderKey = parts.length > 1 ? parts.slice(0, -1).join("/") : "root";
-        if (parts[0] === "syngery-prompts") {
-          if (parts.length <= 3) {
+        if (isSynergyRoot(parts)) {
+          // syngery-prompts/ai/<group>/.../<file>.txt
+          // syngery-prompts/thematic/<group>/.../<file>.txt
+          // legacy: syngery-prompts/<group>/.../<file>.txt
+          const start = (parts[1] === "ai" || parts[1] === "thematic") ? 2 : 1;
+          const suffixSegments = parts.slice(start, -1);
+          if (suffixSegments.length <= 1) {
             return { key: folderKey, label: group };
           }
-          const suffix = parts.slice(2, -1).join("/");
+          const suffix = suffixSegments.slice(1).join("/");
           return { key: folderKey, label: suffix || group };
         }
-        const label = parts.length > 2 ? parts.slice(1, -1).join("/") : parts[0];
+        const label = parts.length > 2 ? parts.slice(1, -1).join("/") : mode;
         return { key: folderKey, label: label || "root" };
       }
 
       const filesWithMeta = data.files.map((file) => {
         const parts = toPathParts(file.relativePath);
-        const group = deriveGroup(parts);
-        const folderMeta = deriveFolderMeta(parts, group);
+        const mode = deriveMode(parts);
+        const group = deriveGroup(parts, mode);
+        const folderMeta = deriveFolderMeta(parts, mode, group);
         return {
           ...file,
+          mode,
           group,
           folderKey: folderMeta.key,
           folderLabel: folderMeta.label,
         };
       });
 
-      const discoveredGroups = [...new Set(filesWithMeta.map((file) => file.group))].sort((a, b) => a.localeCompare(b));
-      const groups = ["all", ...discoveredGroups];
+      const discoveredModes = [...new Set(filesWithMeta.map((file) => file.mode))].sort((a, b) => a.localeCompare(b));
+      const modes = ["all", ...discoveredModes];
 
+      let activeModeIndex = 0;
       let activeGroupIndex = 0;
       let activeFolderIndex = 0;
       let activeFileIndex = 0;
@@ -355,16 +392,37 @@
         }, 1200);
       }
 
+      function getActiveMode() {
+        return modes[activeModeIndex];
+      }
+
+      function getModeFilteredFiles() {
+        const mode = getActiveMode();
+        if (mode === "all") {
+          return filesWithMeta;
+        }
+        return filesWithMeta.filter((file) => file.mode === mode);
+      }
+
+      function getGroups() {
+        const groupsByName = new Set(getModeFilteredFiles().map((file) => file.group));
+        return ["all", ...[...groupsByName].sort((a, b) => a.localeCompare(b))];
+      }
+
       function getActiveGroup() {
+        const groups = getGroups();
+        if (activeGroupIndex >= groups.length) {
+          activeGroupIndex = 0;
+        }
         return groups[activeGroupIndex];
       }
 
       function getGroupFilteredFiles() {
         const group = getActiveGroup();
         if (group === "all") {
-          return filesWithMeta;
+          return getModeFilteredFiles();
         }
-        return filesWithMeta.filter((file) => file.group === group);
+        return getModeFilteredFiles().filter((file) => file.group === group);
       }
 
       function getFolders() {
@@ -407,13 +465,44 @@
         return getGroupFilteredFiles().filter((file) => file.folderKey === folder);
       }
 
+      function renderModeTabs() {
+        modeTabsEl.innerHTML = "";
+        modes.forEach((mode, index) => {
+          const filesCount =
+            mode === "all"
+              ? filesWithMeta.length
+              : filesWithMeta.filter((file) => file.mode === mode).length;
+          const button = document.createElement("button");
+          button.type = "button";
+          button.className = "tab";
+          button.role = "tab";
+          button.id = `mode-tab-${index}`;
+          button.setAttribute("aria-controls", "groupTabs");
+          button.setAttribute("aria-selected", String(index === activeModeIndex));
+          button.textContent = `${mode} (${filesCount})`;
+          button.addEventListener("click", () => {
+            activeModeIndex = index;
+            activeGroupIndex = 0;
+            activeFolderIndex = 0;
+            activeFileIndex = 0;
+            renderModeTabs();
+            renderGroupTabs();
+            renderFolderTabs();
+            renderFileTabs();
+            renderCards();
+          });
+          modeTabsEl.appendChild(button);
+        });
+      }
+
       function renderGroupTabs() {
+        const groups = getGroups();
         groupTabsEl.innerHTML = "";
         groups.forEach((group, index) => {
           const filesCount =
             group === "all"
-              ? filesWithMeta.length
-              : filesWithMeta.filter((file) => file.group === group).length;
+              ? getModeFilteredFiles().length
+              : getModeFilteredFiles().filter((file) => file.group === group).length;
           const button = document.createElement("button");
           button.type = "button";
           button.className = "tab";
@@ -482,19 +571,20 @@
       }
 
       function renderCards() {
+        const mode = getActiveMode();
         const group = getActiveGroup();
         const folder = getActiveFolderLabel();
         const folderFiles = getActiveFiles();
         const file = folderFiles[activeFileIndex];
 
         if (!file) {
-          metaEl.textContent = `Group: ${group} | Folder: ${folder || "none"} | No files available`;
+          metaEl.textContent = `Mode: ${mode} | Group: ${group} | Folder: ${folder || "none"} | No files available`;
           cardsEl.innerHTML = '<p class="empty">No files in this folder.</p>';
           return;
         }
 
         metaEl.textContent =
-          `${data.fileCount} files total | Group: ${group} | Folder: ${folder} (${folderFiles.length} files) | ` +
+          `${data.fileCount} files total | Mode: ${mode} | Group: ${group} | Folder: ${folder} (${folderFiles.length} files) | ` +
           `${file.promptCount} prompts in ${file.relativePath}`;
 
         if (!file.prompts.length) {
@@ -524,6 +614,7 @@
         });
       }
 
+      renderModeTabs();
       renderGroupTabs();
       renderFolderTabs();
       renderFileTabs();

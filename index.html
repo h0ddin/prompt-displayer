@@ -76,6 +76,35 @@
       scrollbar-width: thin;
     }
 
+    .tabs + .tabs {
+      padding-top: 10px;
+      background: linear-gradient(180deg, rgba(14, 24, 44, 0.72), rgba(9, 15, 28, 0.32));
+    }
+
+    .file-menu {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 6px;
+      overflow-y: auto;
+      overflow-x: hidden;
+      max-height: 240px;
+      align-items: start;
+    }
+
+    .file-menu .tab {
+      width: 100%;
+      text-align: left;
+      border-radius: 10px;
+    }
+
+    .tabs-label {
+      padding: 10px 14px 0;
+      color: var(--muted);
+      font-size: 0.82rem;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+
     .tab {
       border: 1px solid rgba(124, 157, 220, 0.36);
       border-radius: 999px;
@@ -217,7 +246,12 @@
       <h1>Prompt Browser</h1>
       <div id="meta" class="meta">Loading prompt files...</div>
     </header>
-    <div id="tabs" class="tabs" role="tablist" aria-label="Prompt files"></div>
+    <div class="tabs-label">Groups</div>
+    <div id="groupTabs" class="tabs" role="tablist" aria-label="Prompt groups"></div>
+    <div class="tabs-label">Folders</div>
+    <div id="folderTabs" class="tabs" role="tablist" aria-label="Prompt folders"></div>
+    <div class="tabs-label">Files</div>
+    <div id="fileTabs" class="tabs file-menu" role="tablist" aria-label="Prompt files"></div>
     <main>
       <section id="cards" class="prompt-grid" aria-live="polite"></section>
     </main>
@@ -226,7 +260,9 @@
   <script src="./prompts-data.js"></script>
   <script>
     const data = window.PROMPT_BROWSER_DATA;
-    const tabsEl = document.getElementById("tabs");
+    const groupTabsEl = document.getElementById("groupTabs");
+    const folderTabsEl = document.getElementById("folderTabs");
+    const fileTabsEl = document.getElementById("fileTabs");
     const cardsEl = document.getElementById("cards");
     const metaEl = document.getElementById("meta");
 
@@ -234,7 +270,21 @@
       metaEl.textContent = "No prompt data found. Run: node scripts/build_prompt_data.mjs";
       cardsEl.innerHTML = '<p class="empty">No prompts to display.</p>';
     } else {
-      let activeIndex = 0;
+      const filesWithMeta = data.files.map((file) => {
+        const parts = file.relativePath.split(/[\\/]/).filter(Boolean);
+        const folder = parts.length > 1 ? parts.slice(0, -1).join("/") : "root";
+        const group =
+          parts[0] === "syngery-prompts" && parts.length >= 3
+            ? parts[1]
+            : "all";
+        return { ...file, folder, group };
+      });
+
+      const groups = ["all", ...new Set(filesWithMeta.filter((file) => file.group !== "all").map((file) => file.group))];
+
+      let activeGroupIndex = 0;
+      let activeFolderIndex = 0;
+      let activeFileIndex = 0;
 
       function escapeHtml(text) {
         return text
@@ -268,29 +318,130 @@
         }, 1200);
       }
 
-      function renderTabs() {
-        tabsEl.innerHTML = "";
-        data.files.forEach((file, index) => {
+      function getActiveGroup() {
+        return groups[activeGroupIndex];
+      }
+
+      function getGroupFilteredFiles() {
+        const group = getActiveGroup();
+        if (group === "all") {
+          return filesWithMeta;
+        }
+        return filesWithMeta.filter((file) => file.group === group);
+      }
+
+      function getFolders() {
+        return [...new Set(getGroupFilteredFiles().map((file) => file.folder))];
+      }
+
+      function getActiveFolder() {
+        const folders = getFolders();
+        if (!folders.length) {
+          return "";
+        }
+        if (activeFolderIndex >= folders.length) {
+          activeFolderIndex = 0;
+        }
+        return folders[activeFolderIndex];
+      }
+
+      function getActiveFiles() {
+        const folder = getActiveFolder();
+        if (!folder) {
+          return [];
+        }
+        return getGroupFilteredFiles().filter((file) => file.folder === folder);
+      }
+
+      function renderGroupTabs() {
+        groupTabsEl.innerHTML = "";
+        groups.forEach((group, index) => {
+          const filesCount =
+            group === "all"
+              ? filesWithMeta.length
+              : filesWithMeta.filter((file) => file.group === group).length;
           const button = document.createElement("button");
           button.type = "button";
           button.className = "tab";
           button.role = "tab";
-          button.id = `tab-${index}`;
-          button.setAttribute("aria-controls", `panel-${index}`);
-          button.setAttribute("aria-selected", String(index === activeIndex));
-          button.textContent = file.fileName;
+          button.id = `group-tab-${index}`;
+          button.setAttribute("aria-controls", "folderTabs");
+          button.setAttribute("aria-selected", String(index === activeGroupIndex));
+          button.textContent = `${group} (${filesCount})`;
           button.addEventListener("click", () => {
-            activeIndex = index;
-            renderTabs();
+            activeGroupIndex = index;
+            activeFolderIndex = 0;
+            activeFileIndex = 0;
+            renderGroupTabs();
+            renderFolderTabs();
+            renderFileTabs();
             renderCards();
           });
-          tabsEl.appendChild(button);
+          groupTabsEl.appendChild(button);
+        });
+      }
+
+      function renderFolderTabs() {
+        const folders = getFolders();
+        folderTabsEl.innerHTML = "";
+        folders.forEach((folder, index) => {
+          const filesCount = getGroupFilteredFiles().filter((file) => file.folder === folder).length;
+          const button = document.createElement("button");
+          button.type = "button";
+          button.className = "tab";
+          button.role = "tab";
+          button.id = `folder-tab-${index}`;
+          button.setAttribute("aria-controls", "fileTabs");
+          button.setAttribute("aria-selected", String(index === activeFolderIndex));
+          button.textContent = `${folder} (${filesCount})`;
+          button.addEventListener("click", () => {
+            activeFolderIndex = index;
+            activeFileIndex = 0;
+            renderFolderTabs();
+            renderFileTabs();
+            renderCards();
+          });
+          folderTabsEl.appendChild(button);
+        });
+      }
+
+      function renderFileTabs() {
+        const folderFiles = getActiveFiles();
+        fileTabsEl.innerHTML = "";
+
+        folderFiles.forEach((file, index) => {
+          const button = document.createElement("button");
+          button.type = "button";
+          button.className = "tab";
+          button.role = "tab";
+          button.id = `file-tab-${index}`;
+          button.setAttribute("aria-controls", "cards");
+          button.setAttribute("aria-selected", String(index === activeFileIndex));
+          button.textContent = file.fileName;
+          button.addEventListener("click", () => {
+            activeFileIndex = index;
+            renderFileTabs();
+            renderCards();
+          });
+          fileTabsEl.appendChild(button);
         });
       }
 
       function renderCards() {
-        const file = data.files[activeIndex];
-        metaEl.textContent = `${data.fileCount} files | ${file.promptCount} prompts in ${file.relativePath}`;
+        const group = getActiveGroup();
+        const folder = getActiveFolder();
+        const folderFiles = getActiveFiles();
+        const file = folderFiles[activeFileIndex];
+
+        if (!file) {
+          metaEl.textContent = `Group: ${group} | Folder: ${folder || "none"} | No files available`;
+          cardsEl.innerHTML = '<p class="empty">No files in this folder.</p>';
+          return;
+        }
+
+        metaEl.textContent =
+          `${data.fileCount} files total | Group: ${group} | Folder: ${folder} (${folderFiles.length} files) | ` +
+          `${file.promptCount} prompts in ${file.relativePath}`;
 
         if (!file.prompts.length) {
           cardsEl.innerHTML = '<p class="empty">This file has no prompts.</p>';
@@ -300,7 +451,7 @@
         cardsEl.innerHTML = file.prompts
           .map(
             (prompt, promptIndex) => `
-              <article class="prompt-card" id="panel-${activeIndex}" role="tabpanel" aria-labelledby="tab-${activeIndex}">
+              <article class="prompt-card">
                 <h2 class="prompt-title">${escapeHtml(prompt.title || `Prompt ${promptIndex + 1}`)}</h2>
                 <p class="prompt-snippet">${escapeHtml(prompt.snippet)}</p>
                 <div class="copy-row">
@@ -319,7 +470,9 @@
         });
       }
 
-      renderTabs();
+      renderGroupTabs();
+      renderFolderTabs();
+      renderFileTabs();
       renderCards();
     }
   </script>

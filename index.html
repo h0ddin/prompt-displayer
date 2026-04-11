@@ -270,17 +270,54 @@
       metaEl.textContent = "No prompt data found. Run: node scripts/build_prompt_data.mjs";
       cardsEl.innerHTML = '<p class="empty">No prompts to display.</p>';
     } else {
+      function toPathParts(path) {
+        return String(path || "").split(/[\\/]/).filter(Boolean);
+      }
+
+      function deriveGroup(parts) {
+        if (!parts.length) {
+          return "root";
+        }
+        if (parts[0] === "syngery-prompts") {
+          // New structure: syngery-prompts/<group>/<file>.txt
+          // Legacy fallback: syngery-prompts/<file>.txt -> map to "sets"
+          return parts.length >= 3 ? parts[1] : "sets";
+        }
+        // Non-synergy roots (e.g. basic/*) become their own groups.
+        return parts[0];
+      }
+
+      function deriveFolderMeta(parts, group) {
+        if (!parts.length) {
+          return { key: "root", label: "root" };
+        }
+
+        const folderKey = parts.length > 1 ? parts.slice(0, -1).join("/") : "root";
+        if (parts[0] === "syngery-prompts") {
+          if (parts.length <= 3) {
+            return { key: folderKey, label: group };
+          }
+          const suffix = parts.slice(2, -1).join("/");
+          return { key: folderKey, label: suffix || group };
+        }
+        const label = parts.length > 2 ? parts.slice(1, -1).join("/") : parts[0];
+        return { key: folderKey, label: label || "root" };
+      }
+
       const filesWithMeta = data.files.map((file) => {
-        const parts = file.relativePath.split(/[\\/]/).filter(Boolean);
-        const folder = parts.length > 1 ? parts.slice(0, -1).join("/") : "root";
-        const group =
-          parts[0] === "syngery-prompts" && parts.length >= 3
-            ? parts[1]
-            : "all";
-        return { ...file, folder, group };
+        const parts = toPathParts(file.relativePath);
+        const group = deriveGroup(parts);
+        const folderMeta = deriveFolderMeta(parts, group);
+        return {
+          ...file,
+          group,
+          folderKey: folderMeta.key,
+          folderLabel: folderMeta.label,
+        };
       });
 
-      const groups = ["all", ...new Set(filesWithMeta.filter((file) => file.group !== "all").map((file) => file.group))];
+      const discoveredGroups = [...new Set(filesWithMeta.map((file) => file.group))].sort((a, b) => a.localeCompare(b));
+      const groups = ["all", ...discoveredGroups];
 
       let activeGroupIndex = 0;
       let activeFolderIndex = 0;
@@ -331,7 +368,13 @@
       }
 
       function getFolders() {
-        return [...new Set(getGroupFilteredFiles().map((file) => file.folder))];
+        const foldersByKey = new Map();
+        getGroupFilteredFiles().forEach((file) => {
+          if (!foldersByKey.has(file.folderKey)) {
+            foldersByKey.set(file.folderKey, file.folderLabel);
+          }
+        });
+        return [...foldersByKey.entries()].map(([key, label]) => ({ key, label }));
       }
 
       function getActiveFolder() {
@@ -342,7 +385,18 @@
         if (activeFolderIndex >= folders.length) {
           activeFolderIndex = 0;
         }
-        return folders[activeFolderIndex];
+        return folders[activeFolderIndex].key;
+      }
+
+      function getActiveFolderLabel() {
+        const folders = getFolders();
+        if (!folders.length) {
+          return "none";
+        }
+        if (activeFolderIndex >= folders.length) {
+          activeFolderIndex = 0;
+        }
+        return folders[activeFolderIndex].label;
       }
 
       function getActiveFiles() {
@@ -350,7 +404,7 @@
         if (!folder) {
           return [];
         }
-        return getGroupFilteredFiles().filter((file) => file.folder === folder);
+        return getGroupFilteredFiles().filter((file) => file.folderKey === folder);
       }
 
       function renderGroupTabs() {
@@ -385,7 +439,7 @@
         const folders = getFolders();
         folderTabsEl.innerHTML = "";
         folders.forEach((folder, index) => {
-          const filesCount = getGroupFilteredFiles().filter((file) => file.folder === folder).length;
+          const filesCount = getGroupFilteredFiles().filter((file) => file.folderKey === folder.key).length;
           const button = document.createElement("button");
           button.type = "button";
           button.className = "tab";
@@ -393,7 +447,7 @@
           button.id = `folder-tab-${index}`;
           button.setAttribute("aria-controls", "fileTabs");
           button.setAttribute("aria-selected", String(index === activeFolderIndex));
-          button.textContent = `${folder} (${filesCount})`;
+          button.textContent = `${folder.label} (${filesCount})`;
           button.addEventListener("click", () => {
             activeFolderIndex = index;
             activeFileIndex = 0;
@@ -429,7 +483,7 @@
 
       function renderCards() {
         const group = getActiveGroup();
-        const folder = getActiveFolder();
+        const folder = getActiveFolderLabel();
         const folderFiles = getActiveFiles();
         const file = folderFiles[activeFileIndex];
 
